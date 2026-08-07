@@ -475,9 +475,20 @@ input.addEventListener('input', () => {
 function resumeSession() {
   if (!state.chat || state.chat.length === 0) return false;
   showScreen('chat');
-  renderChapterCard();
-  state.chat.forEach((m) => { if (m.role === 'assistant') addMessage('assistant', m.content); else addMessage('user', m.content); });
+  // 章节卡片只在 chatInner 为空时才渲染（避免重复）
+  if (!chatInner.querySelector('.chapter-card')) {
+    renderChapterCard();
+  }
+  // 只渲染 DOM 中还没有的消息（避免重复渲染）
+  if (chatInner.querySelectorAll('.msg').length === 0) {
+    state.chat.forEach((m) => { if (m.role === 'assistant') addMessage('assistant', m.content); else addMessage('user', m.content); });
+  }
   updateProgress();
+  // 滚动到底部 + 聚焦输入框，让用户直接接着答
+  requestAnimationFrame(() => {
+    chatScroll.scrollTop = chatScroll.scrollHeight;
+    input.focus();
+  });
   return true;
 }
 
