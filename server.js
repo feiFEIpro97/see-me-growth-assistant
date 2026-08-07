@@ -192,6 +192,40 @@ async function handleAdminSessionDetail(req, res) {
   sendJson(res, 200, msgs);
 }
 
+// --- 用户端：历史记录 API（按 user_id 识别，无需 ADMIN_TOKEN） ---
+async function handleHistory(req, res) {
+  const url = new URL(req.url, 'http://x');
+  const uid = url.searchParams.get('uid');
+  if (!uid) return sendJson(res, 400, { error: '缺少 uid' });
+  const sessions = await db.getHistoryByUser(uid);
+  sendJson(res, 200, sessions);
+}
+
+async function handleHistoryMessages(req, res) {
+  const m = req.url.match(/^\/api\/history\/(\d+)\/messages/);
+  if (!m) return sendJson(res, 400, { error: '无效会话ID' });
+  const msgs = await db.getSessionMessages(Number(m[1]));
+  sendJson(res, 200, msgs);
+}
+
+async function handleHistoryReport(req, res) {
+  const m = req.url.match(/^\/api\/history\/(\d+)\/report/);
+  if (!m) return sendJson(res, 400, { error: '无效会话ID' });
+  const report = await db.getReport(Number(m[1]));
+  sendJson(res, 200, { report });
+}
+
+// 保存报告到该用户最新会话
+async function handleSaveReport(req, res) {
+  let body;
+  try { body = JSON.parse(await readBody(req)); }
+  catch { return sendJson(res, 400, { error: '请求体不是合法 JSON' }); }
+  const { userId, report } = body;
+  if (!userId || !report) return sendJson(res, 400, { error: '缺少 userId 或 report' });
+  await db.saveReportToLatest(userId, report);
+  sendJson(res, 200, { ok: true });
+}
+
 const server = http.createServer((req, res) => {
   const url = req.url.split('?')[0];
   // 后台页面
@@ -205,7 +239,11 @@ const server = http.createServer((req, res) => {
   // API 路由
   if (req.method === 'POST' && url === '/api/chat') return handleChat(req, res);
   if (req.method === 'POST' && url === '/api/progress') return handleProgress(req, res);
+  if (req.method === 'POST' && url === '/api/report') return handleSaveReport(req, res);
   if (req.method === 'GET' && url === '/api/admin/stats') return handleAdminStats(req, res);
+  if (req.method === 'GET' && url === '/api/history') return handleHistory(req, res);
+  if (req.method === 'GET' && /^\/api\/history\/\d+\/messages/.test(url)) return handleHistoryMessages(req, res);
+  if (req.method === 'GET' && /^\/api\/history\/\d+\/report/.test(url)) return handleHistoryReport(req, res);
   if (req.method === 'GET' && url.startsWith('/api/admin/sessions')) {
     if (/\/api\/admin\/sessions\/\d+$/.test(req.url)) return handleAdminSessionDetail(req, res);
     return handleAdminSessions(req, res);

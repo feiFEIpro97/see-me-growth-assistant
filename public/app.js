@@ -20,6 +20,9 @@ const USER_KEY = 'see-me-uid';
 
 // 匿名用户 ID（存 localStorage，同一浏览器视为同一用户）
 function getUserId() {
+  // 优先用用户自定义 ID，否则用匿名 ID
+  const custom = localStorage.getItem('see-me-custom-id');
+  if (custom && custom.trim()) return custom.trim();
   let uid = localStorage.getItem(USER_KEY);
   if (!uid) {
     uid = 'u_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 10);
@@ -30,7 +33,7 @@ function getUserId() {
 
 // ---------- DOM ----------
 const $ = (s) => document.querySelector(s);
-const screens = { home: $('#screen-home'), chat: $('#screen-chat'), report: $('#screen-report') };
+const screens = { home: $('#screen-home'), chat: $('#screen-chat'), report: $('#screen-report'), history: $('#screen-history'), 'history-detail': $('#screen-history-detail') };
 const chatInner = $('#chat-inner');
 const chatScroll = $('#chat-scroll');
 const input = $('#input');
@@ -208,8 +211,14 @@ async function send(text) {
   const typing = addTyping();
   try {
     const messages = [{ role: 'system', content: window.SYSTEM_PROMPT }, ...state.chat];
-    const reply = await callAI(messages);
+    let reply = await callAI(messages);
     typing.remove();
+
+    // 检测结束标记（兼容全角/半角）
+    const done = /【REPORT_READY】|\[REPORT_READY\]/;
+    const ready = done.test(reply);
+    if (ready) reply = reply.replace(/(【REPORT_READY】|\[REPORT_READY\])/g, '').trim();
+
     state.chat.push({ role: 'assistant', content: reply });
     state.currentChapter = detectChapter(reply, state.currentChapter);
     saveState();
@@ -218,6 +227,11 @@ async function send(text) {
     chapterName.textContent = CHAPTERS[state.currentChapter].name;
     reportProgress();
     showToast('海獭教练思考好啦 🌊');
+
+    // 若探索全部完成，自动生成报告
+    if (ready) {
+      await generateReportAndNotify();
+    }
   } catch (e) {
     typing.remove();
     addMessage('assistant', '🦦 哎呀，我这边有点小状况：\n' + e.message);
@@ -226,6 +240,55 @@ async function send(text) {
   sending = false;
   btnSend.disabled = false;
   input.focus();
+}
+
+// 生成报告并在对话中推送提醒
+async function generateReportAndNotify() {
+  // 对话中提示正在生成
+  const genMsg = document.createElement('div');
+  genMsg.className = 'msg msg-otter';
+  genMsg.innerHTML = `<div class="avatar"><img src="assets/avatar-o1.png" alt="海獭教练"></div><div class="msg-bubble gen-notice">🦦 正在为你生成专属《个人创造战略地图》…</div>`;
+  chatInner.appendChild(genMsg);
+  scrollToBottom();
+
+  try {
+    const messages = [
+      { role: 'system', content: window.SYSTEM_PROMPT },
+      ...state.chat,
+      { role: 'user', content: '我们的探索已经全部完成。现在请根据我上面的全部回答，生成完整的《个人创造战略地图》，严格按第七章的结构输出，用 Markdown 分节，语气温暖具体。' },
+    ];
+    const report = await callAI(messages);
+    localStorage.setItem(REPORT_KEY, report);
+    genMsg.remove();
+
+    // 报告同步保存到服务端（按用户ID的最新会话）
+    try {
+      await fetch('/api/report', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: getUserId(), report }),
+      });
+    } catch (e) { /* 保存失败不影响本地查看 */ }
+
+    // 对话中推送可点击提醒
+    const notice = document.createElement('div');
+    notice.className = 'msg msg-otter';
+    notice.innerHTML = `
+      <div class="avatar"><img src="assets/avatar-o1.png" alt="海獭教练"></div>
+      <div class="report-notice" id="report-notice">
+        <img src="assets/report-otter.jpg" alt="报告" />
+        <div class="rn-text">
+          <div class="rn-title">🎉 你的《个人创造战略地图》完成啦！</div>
+          <div class="rn-sub">点击查看完整报告</div>
+        </div>
+      </div>`;
+    chatInner.appendChild(notice);
+    scrollToBottom();
+    notice.querySelector('.report-notice').addEventListener('click', viewReport);
+  } catch (e) {
+    genMsg.remove();
+    addMessage('assistant', '🦦 报告生成遇到点问题：' + e.message);
+  }
 }
 
 // ---------- 重置 / 开始 ----------
@@ -277,13 +340,102 @@ async function viewReport() {
   try {
     const messages = [
       { role: 'system', content: window.SYSTEM_PROMPT },
+      ...state.chat,
       { role: 'user', content: '我们的探索已经全部完成。现在请根据我上面的全部回答，生成完整的《个人创造战略地图》，严格按第七章的结构输出（核心人生主题 / 个人身份组合 / 核心优势组合 / 潜在创造方向 / 五年路线图 / 个人操作系统 / 未来30天行动计划），用 Markdown 分节，语气温暖具体。' },
     ];
     const reply = await callAI(messages);
     localStorage.setItem(REPORT_KEY, reply);
+    // 同步保存到服务端
+    try {
+      await fetch('/api/report', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: getUserId(), report: reply }),
+      });
+    } catch (e) { /* ignore */ }
     reportContent.innerHTML = mdToHtml(reply);
   } catch (e) {
     reportContent.innerHTML = `<p class="report-loading">🦦 生成失败：${escapeHtml(e.message)}</p>`;
+  }
+}
+
+// ---------- 用户 ID 与历史记录 ----------
+function initAccountUI() {
+  const custom = localStorage.getItem('see-me-custom-id');
+  $('#my-id-input').value = custom || '';
+  $('#account-tip').textContent = custom ? '当前 ID：' + custom : '使用匿名 ID：' + getUserId();
+}
+
+function saveCustomId() {
+  const v = $('#my-id-input').value.trim();
+  if (!v) { showToast('请输入一个 ID'); return; }
+  localStorage.setItem('see-me-custom-id', v);
+  $('#account-tip').textContent = '已保存 ID：' + v;
+  showToast('ID 已保存，换设备用同一 ID 可找回历史 🎉');
+}
+
+// 打开历史记录列表
+async function openHistory() {
+  showScreen('history');
+  const listBox = $('#history-list');
+  listBox.innerHTML = '<p class="history-empty">加载中…</p>';
+  try {
+    const sessions = await (await fetch('/api/history?uid=' + encodeURIComponent(getUserId()))).json();
+    if (!sessions.length) {
+      listBox.innerHTML = '<p class="history-empty">还没有历史记录。开始探索后，这里会保存你的对话 🌊</p>';
+      return;
+    }
+    listBox.innerHTML = '';
+    sessions.forEach((s) => {
+      const item = document.createElement('div');
+      item.className = 'history-item';
+      const done = s.chapter >= CHAPTERS.length ? '已完成' : `第 ${s.chapter + 1} 章`;
+      item.innerHTML = `
+        <div class="hi-top">
+          <span class="hi-report">${done}</span>
+          <span class="hi-time">${new Date(s.last_active).toLocaleString('zh-CN', { hour12: false })}</span>
+        </div>
+        <div class="hi-meta">
+          <span class="hi-chapter">${s.msg_count} 条消息</span>
+          <span class="hi-msgs">用户回答 ${s.user_msg_count} 次</span>
+          ${s.has_report ? '<span class="hi-report">已有报告 📄</span>' : ''}
+        </div>`;
+      item.addEventListener('click', () => openHistoryDetail(s.id));
+      listBox.appendChild(item);
+    });
+  } catch (e) {
+    listBox.innerHTML = `<p class="history-empty">加载失败：${escapeHtml(e.message)}</p>`;
+  }
+}
+
+// 打开某历史会话详情
+async function openHistoryDetail(sessionId) {
+  showScreen('history-detail');
+  $('#hdetail-title').textContent = '历史对话 #' + sessionId;
+  const thread = $('#hdetail-thread');
+  thread.innerHTML = '<p class="history-empty">加载中…</p>';
+  $('#hdetail-report-wrap').classList.add('hidden');
+  try {
+    const msgs = await (await fetch('/api/history/' + sessionId + '/messages')).json();
+    thread.innerHTML = msgs.map((m) => {
+      const isAi = m.role === 'assistant';
+      return `<div class="ht-row ${isAi ? 'ai' : 'user'}">
+        <span class="ht-who">${isAi ? 'AI' : '用户'}</span>
+        <div class="ht-body">${isAi ? mdToHtml(m.content) : escapeHtml(m.content)}
+          <div class="ht-meta">${new Date(m.created_at).toLocaleString('zh-CN', { hour12: false })}${m.chapter ? ' · 第' + m.chapter + '章' : ''}</div>
+        </div>
+      </div>`;
+    }).join('');
+    if (!msgs.length) thread.innerHTML = '<p class="history-empty">该会话暂无消息</p>';
+
+    // 加载报告
+    const rep = await (await fetch('/api/history/' + sessionId + '/report')).json();
+    if (rep.report) {
+      $('#hdetail-report').innerHTML = mdToHtml(rep.report);
+      $('#hdetail-report-wrap').classList.remove('hidden');
+    }
+  } catch (e) {
+    thread.innerHTML = `<p class="history-empty">加载失败：${escapeHtml(e.message)}</p>`;
   }
 }
 
@@ -296,6 +448,10 @@ function showScreen(name) {
 // ---------- 事件绑定 ----------
 $('#btn-start').addEventListener('click', startNew);
 $('#btn-send').addEventListener('click', () => send());
+$('#btn-save-id').addEventListener('click', saveCustomId);
+$('#btn-history').addEventListener('click', openHistory);
+$('#btn-history-back').addEventListener('click', () => showScreen('home'));
+$('#btn-hdetail-back').addEventListener('click', openHistory);
 $('#btn-restart').addEventListener('click', () => {
   if (confirm('确定重新开始吗？将清空当前探索进度。')) startNew();
 });
@@ -317,6 +473,7 @@ input.addEventListener('input', () => {
 // ---------- 启动 ----------
 async function init() {
   loadState();
+  initAccountUI();
   // 禁用按钮等待状态检查
   try {
     const res = await fetch('/api/status');

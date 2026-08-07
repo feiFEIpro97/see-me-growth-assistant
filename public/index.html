@@ -35,6 +35,43 @@
       </p>
       <button id="btn-start" class="btn btn-primary">开始探索 🦦</button>
       <p class="home-tip">约 20 分钟 · 7 个生命章节 · 17 个问题</p>
+      <div class="home-account">
+        <details class="account-box" id="account-box">
+          <summary>🔑 我的探索 ID（跨设备找回历史）</summary>
+          <div class="account-inner">
+            <input id="my-id-input" type="text" placeholder="输入你的探索 ID，或留空自动生成" />
+            <button id="btn-save-id" class="btn btn-ghost btn-sm">保存 ID</button>
+            <button id="btn-history" class="btn btn-ghost btn-sm">📂 我的历史记录</button>
+            <p class="account-tip" id="account-tip"></p>
+          </div>
+        </details>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 历史记录页面 ============ -->
+  <section id="screen-history" class="screen">
+    <div class="report-wrap">
+      <div class="backbar">
+        <button class="btn btn-ghost" id="btn-history-back">← 返回首页</button>
+        <h2>📂 我的历史记录</h2>
+      </div>
+      <div id="history-list" class="history-list"></div>
+    </div>
+  </section>
+
+  <!-- ============ 历史详情页面 ============ -->
+  <section id="screen-history-detail" class="screen">
+    <div class="report-wrap">
+      <div class="backbar">
+        <button class="btn btn-ghost" id="btn-hdetail-back">← 返回列表</button>
+        <h2 id="hdetail-title">历史对话</h2>
+      </div>
+      <div id="hdetail-thread" class="thread"></div>
+      <div id="hdetail-report-wrap" class="hidden">
+        <h3>🧭 我的战略地图</h3>
+        <div id="hdetail-report" class="report-content"></div>
+      </div>
     </div>
   </section>
 

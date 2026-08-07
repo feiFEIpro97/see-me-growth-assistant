@@ -23,6 +23,8 @@
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
+.hidden { display: none !important; }
+
 html, body { height: 100%; }
 
 body {
@@ -183,6 +185,60 @@ body {
   font-size: 14px; opacity: 0; pointer-events: none; transition: all 0.3s; z-index: 99;
 }
 .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+/* ---------- 首页账户/历史 ---------- */
+.home-account { margin-top: 18px; text-align: left; }
+.account-box { background: var(--white); border: 1.5px solid var(--brown-200); border-radius: 14px; padding: 10px 14px; }
+.account-box summary { cursor: pointer; font-size: 13px; color: var(--brown-700); font-weight: 600; }
+.account-inner { margin-top: 10px; display: flex; flex-direction: column; gap: 8px; }
+.account-inner input { padding: 10px 12px; border: 2px solid var(--brown-200); border-radius: 10px; font-size: 14px; outline: none; }
+.account-inner input:focus { border-color: var(--brown-500); }
+.btn-sm { padding: 8px 14px; font-size: 13px; }
+.account-tip { font-size: 12px; color: var(--text-soft); min-height: 16px; }
+
+/* ---------- 历史记录 ---------- */
+.backbar { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; }
+.backbar h2 { color: var(--brown-700); font-size: 22px; }
+.history-list { display: flex; flex-direction: column; gap: 12px; }
+.history-item {
+  background: var(--white); border: 1.5px solid var(--brown-200); border-radius: 14px;
+  padding: 16px 18px; cursor: pointer; transition: all 0.2s; box-shadow: var(--shadow-sm);
+}
+.history-item:hover { transform: translateY(-2px); border-color: var(--brown-500); }
+.history-item .hi-top { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
+.history-item .hi-time { font-size: 12px; color: var(--text-soft); }
+.history-item .hi-meta { display: flex; gap: 8px; margin-top: 8px; align-items: center; flex-wrap: wrap; }
+.history-item .hi-chapter { background: var(--blue-100); color: var(--blue-700); border-radius: 999px; padding: 2px 10px; font-size: 12px; font-weight: 600; }
+.history-item .hi-msgs { font-size: 12px; color: var(--text-soft); }
+.history-item .hi-report { background: var(--brown-100); color: var(--brown-700); border-radius: 999px; padding: 2px 10px; font-size: 12px; font-weight: 600; }
+.history-empty { text-align: center; color: var(--text-soft); padding: 50px 20px; background: var(--white); border-radius: 14px; border: 1.5px dashed var(--brown-200); }
+
+/* 历史详情 */
+.thread { background: var(--white); border-radius: 14px; border: 1.5px solid var(--brown-200); padding: 18px; }
+.ht-row { display: flex; gap: 10px; margin-bottom: 14px; }
+.ht-row .ht-who { flex-shrink: 0; width: 56px; font-size: 12px; font-weight: 700; text-align: center; border-radius: 8px; padding: 6px 0; align-self: flex-start; }
+.ht-row.user .ht-who { background: var(--blue-100); color: var(--blue-700); }
+.ht-row.ai .ht-who { background: var(--brown-100); color: var(--brown-700); }
+.ht-row .ht-body { flex: 1; background: #fafafa; border-radius: 10px; padding: 12px 14px; font-size: 14px; line-height: 1.7; white-space: pre-wrap; word-break: break-word; }
+.ht-row.ai .ht-body { white-space: normal; }
+.ht-row.ai .ht-body h3,.ht-row.ai .ht-body h4 { color: var(--brown-700); margin: 8px 0 4px; }
+.ht-row.ai .ht-body ul { margin: 4px 0 4px 18px; }
+.ht-row .ht-meta { font-size: 11px; color: var(--text-soft); margin-top: 4px; }
+#hdetail-report-wrap { margin-top: 24px; }
+#hdetail-report-wrap h3 { color: var(--brown-700); margin-bottom: 10px; }
+
+/* 报告提醒卡片 */
+.report-notice {
+  background: linear-gradient(135deg, var(--brown-100), var(--blue-100));
+  border: 1.5px solid var(--brown-300); border-radius: 16px; padding: 16px 18px;
+  display: flex; align-items: center; gap: 14px; cursor: pointer; transition: all 0.2s;
+}
+.report-notice:hover { transform: translateY(-2px); box-shadow: var(--shadow); }
+.report-notice img { width: 56px; height: 56px; border-radius: 50%; object-fit: cover; flex-shrink: 0; }
+.report-notice .rn-text { flex: 1; }
+.report-notice .rn-title { font-weight: 800; color: var(--brown-900); font-size: 15px; }
+.report-notice .rn-sub { font-size: 13px; color: var(--brown-700); margin-top: 2px; }
+.gen-notice { font-style: italic; color: var(--text-soft); font-size: 13px; }
 
 /* ---------- 响应式 ---------- */
 @media (max-width: 560px) {

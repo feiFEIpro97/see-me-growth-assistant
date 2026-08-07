@@ -147,6 +147,52 @@ async function getSessionMessages(sessionId) {
   return r.rows;
 }
 
+// 用户端：按 user_id 查询该用户的历史会话列表
+async function getHistoryByUser(userId, limit = 50) {
+  if (!dbReady) return [];
+  const r = await pool.query(`
+    SELECT s.id, s.user_id, s.started_at, s.last_active, s.chapter,
+           (s.report IS NOT NULL AND s.report <> '') AS has_report,
+           (SELECT COUNT(*) FROM see_me_messages m WHERE m.session_id = s.id) AS msg_count,
+           (SELECT COUNT(*) FROM see_me_messages m WHERE m.session_id = s.id AND m.role='user') AS user_msg_count
+    FROM see_me_sessions s
+    WHERE s.user_id = $1
+    ORDER BY s.last_active DESC
+    LIMIT $2
+  `, [userId, limit]);
+  return r.rows;
+}
+
+// 用户端：保存/更新某会话的报告
+async function saveReport(sessionId, report) {
+  if (!dbReady) return;
+  try {
+    await pool.query('UPDATE see_me_sessions SET report = $1 WHERE id = $2', [report, sessionId]);
+  } catch (e) {
+    console.error('[db] saveReport 失败：', e.message);
+  }
+}
+
+// 用户端：读取某会话的报告
+async function getReport(sessionId) {
+  if (!dbReady) return null;
+  const r = await pool.query('SELECT report FROM see_me_sessions WHERE id = $1', [sessionId]);
+  return r.rows[0]?.report || null;
+}
+
+// 用户端：把报告保存到该用户最近一次会话
+async function saveReportToLatest(userId, report) {
+  if (!dbReady) return;
+  try {
+    await pool.query(
+      'UPDATE see_me_sessions SET report = $1 WHERE id = (SELECT id FROM see_me_sessions WHERE user_id = $2 ORDER BY id DESC LIMIT 1)',
+      [report, userId]
+    );
+  } catch (e) {
+    console.error('[db] saveReportToLatest 失败：', e.message);
+  }
+}
+
 module.exports = {
   isConfigured,
   initDb,
@@ -155,4 +201,8 @@ module.exports = {
   getStats,
   listSessions,
   getSessionMessages,
+  getHistoryByUser,
+  saveReport,
+  getReport,
+  saveReportToLatest,
 };
