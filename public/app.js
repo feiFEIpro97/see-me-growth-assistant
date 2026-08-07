@@ -113,7 +113,7 @@ function addMessage(role, content) {
     wrap.innerHTML = `<div class="msg-bubble">${escapeHtml(content)}</div>`;
   } else {
     wrap.className = 'msg msg-otter';
-    wrap.innerHTML = `<div class="avatar"><img src="assets/sea-otter.svg" alt="海獭教练"></div><div class="msg-bubble">${mdToHtml(content)}</div>`;
+    wrap.innerHTML = `<div class="avatar"><img src="assets/avatar-o1.png" alt="海獭教练"></div><div class="msg-bubble">${mdToHtml(content)}</div>`;
   }
   chatInner.appendChild(wrap);
   scrollToBottom();
@@ -123,7 +123,7 @@ function addMessage(role, content) {
 function addTyping() {
   const wrap = document.createElement('div');
   wrap.className = 'msg msg-otter typing';
-  wrap.innerHTML = `<div class="avatar"><img src="assets/sea-otter.svg" alt="海獭教练"></div><div class="msg-bubble"><span class="typing-dot"></span><span class="typing-dot"></span><span class="typing-dot"></span></div>`;
+  wrap.innerHTML = `<div class="avatar"><img src="assets/avatar-o1.png" alt="海獭教练"></div><div class="msg-bubble"><span class="typing-dot"></span><span class="typing-dot"></span><span class="typing-dot"></span></div>`;
   chatInner.appendChild(wrap);
   scrollToBottom();
   return wrap;
