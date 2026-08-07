@@ -1,0 +1,11 @@
+{
+  "name": "see-me-growth-coach",
+  "version": "1.0.0",
+  "description": "see-me 个人成长助手 —— 让创造发生 make creation happen",
+  "main": "server.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {}
+}

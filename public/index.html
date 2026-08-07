@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>see-me 个人成长助手 · 让创造发生</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%A6%A6%3C/text%3E%3C/svg%3E" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <!-- 背景装饰 -->
+  <div class="bg-decor" aria-hidden="true">
+    <div class="blob blob-1"></div>
+    <div class="blob blob-2"></div>
+    <div class="blob blob-3"></div>
+    <div class="wave wave-top"></div>
+    <div class="wave wave-bottom"></div>
+  </div>
+
+  <!-- ============ 首页 ============ -->
+  <section id="screen-home" class="screen active">
+    <div class="home-card">
+      <div class="otter-hero">
+        <img src="assets/sea-otter.svg" alt="海獭吉祥物" class="otter-img" />
+        <div class="sparkle sparkle-1">✦</div>
+        <div class="sparkle sparkle-2">✧</div>
+        <div class="sparkle sparkle-3">✦</div>
+      </div>
+      <h1 class="brand">see-me</h1>
+      <p class="slogan">让创造发生<br /><span class="slogan-en">make creation happen</span></p>
+      <p class="home-desc">
+        🌊 我是你的海獭人生教练。<br />
+        从「我是谁」到「我想创造什么」，<br />
+        我们一起完成一次深度自我探索，生成你的《个人创造战略地图》。
+      </p>
+      <button id="btn-start" class="btn btn-primary">开始探索 🦦</button>
+      <p class="home-tip">约 20 分钟 · 7 个生命章节 · 17 个问题</p>
+    </div>
+  </section>
+
+  <!-- ============ 探索界面 ============ -->
+  <section id="screen-chat" class="screen">
+    <header class="topbar">
+      <div class="topbar-left">
+        <img src="assets/sea-otter.svg" alt="海獭" class="mini-otter" />
+        <div class="topbar-title">
+          <span class="brand-small">see-me</span>
+          <span class="chapter-name" id="chapter-name">第一章 · 终极愿景</span>
+        </div>
+      </div>
+      <div class="topbar-right">
+        <div class="progress-wrap">
+          <div class="progress-track"><div class="progress-fill" id="progress-fill"></div></div>
+          <span class="progress-text" id="progress-text">0/7</span>
+        </div>
+        <button id="btn-report" class="btn btn-ghost" title="查看我的战略地图">🗺️ 报告</button>
+        <button id="btn-restart" class="btn btn-ghost" title="重新开始">↺</button>
+      </div>
+    </header>
+
+    <div class="chat-scroll" id="chat-scroll">
+      <div class="chat-inner" id="chat-inner"></div>
+      <!-- 海獭泳姿分隔 -->
+      <div class="otter-swim" aria-hidden="true">
+        <img src="assets/sea-otter-mini.svg" alt="" class="swim-otter" />
+      </div>
+    </div>
+
+    <div class="composer">
+      <div class="suggestion-row" id="suggestion-row"></div>
+      <div class="composer-box">
+        <textarea id="input" rows="1" placeholder="写下你的想法…（可点上面的选项，也可自由输入）"></textarea>
+        <button id="btn-send" class="btn-send" title="发送">➤</button>
+      </div>
+      <p class="composer-hint">探索阶段，我们一起发现，不急着下结论 🌱</p>
+    </div>
+  </section>
+
+  <!-- ============ 报告界面 ============ -->
+  <section id="screen-report" class="screen">
+    <div class="report-wrap">
+      <div class="report-head">
+        <img src="assets/sea-otter.svg" alt="海獭" class="report-otter" />
+        <h2>🧭 我的《个人创造战略地图》</h2>
+        <p class="report-sub">让创造发生 · 属于你的探索成果</p>
+      </div>
+      <div id="report-content" class="report-content">
+        <p class="report-loading">正在绘制你的战略地图…</p>
+      </div>
+      <div class="report-actions">
+        <button id="btn-copy" class="btn btn-primary">📋 复制全文</button>
+        <button id="btn-back-chat" class="btn btn-ghost">← 回到对话</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- Toast -->
+  <div id="toast" class="toast"></div>
+
+  <script src="system-prompt.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
