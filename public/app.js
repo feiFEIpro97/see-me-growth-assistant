@@ -276,7 +276,7 @@ async function generateReportAndNotify() {
     notice.innerHTML = `
       <div class="avatar"><img src="assets/avatar-o1.png" alt="海獭教练"></div>
       <div class="report-notice" id="report-notice">
-        <img src="assets/report-otter.jpg" alt="报告" />
+        <img src="assets/report-otter.png" alt="报告" />
         <div class="rn-text">
           <div class="rn-title">🎉 你的《个人创造战略地图》完成啦！</div>
           <div class="rn-sub">点击查看完整报告</div>
