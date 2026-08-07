@@ -16,6 +16,17 @@ const CHAPTERS = [
 ];
 const STORAGE_KEY = 'see-me-session-v1';
 const REPORT_KEY = 'see-me-report-v1';
+const USER_KEY = 'see-me-uid';
+
+// 匿名用户 ID（存 localStorage，同一浏览器视为同一用户）
+function getUserId() {
+  let uid = localStorage.getItem(USER_KEY);
+  if (!uid) {
+    uid = 'u_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 10);
+    localStorage.setItem(USER_KEY, uid);
+  }
+  return uid;
+}
 
 // ---------- DOM ----------
 const $ = (s) => document.querySelector(s);
@@ -152,15 +163,32 @@ function detectChapter(content, prevChapter) {
 }
 
 // ---------- Deepseek 调用 ----------
-async function callAI(messages) {
+async function callAI(messages, opts = {}) {
   const res = await fetch('/api/chat', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ messages, temperature: 0.8 }),
+    body: JSON.stringify({
+      messages,
+      temperature: 0.8,
+      userId: getUserId(),
+      chapter: state.currentChapter,
+      question: opts.question || null,
+    }),
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || `请求失败(${res.status})`);
   return data.content || '';
+}
+
+// 上报章节进度
+function reportProgress() {
+  try {
+    fetch('/api/progress', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId: getUserId(), chapter: state.currentChapter }),
+    });
+  } catch (e) { /* fire-and-forget */ }
 }
 
 // ---------- 发送 ----------
@@ -188,6 +216,7 @@ async function send(text) {
     addMessage('assistant', reply);
     updateProgress();
     chapterName.textContent = CHAPTERS[state.currentChapter].name;
+    reportProgress();
     showToast('海獭教练思考好啦 🌊');
   } catch (e) {
     typing.remove();
