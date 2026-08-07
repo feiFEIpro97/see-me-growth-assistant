@@ -65,6 +65,7 @@ body {
   border: 1.5px solid var(--brown-200);
 }
 .btn-ghost:hover { background: var(--white); }
+.btn-home { padding: 8px 12px; font-size: 16px; line-height: 1; }
 
 /* ---------- 首页 ---------- */
 #screen-home { align-items: center; justify-content: center; padding: 20px; }

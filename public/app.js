@@ -446,8 +446,9 @@ function showScreen(name) {
 }
 
 // ---------- 事件绑定 ----------
-$('#btn-start').addEventListener('click', startNew);
+$('#btn-start').addEventListener('click', () => { if (!resumeSession()) startNew(); });
 $('#btn-send').addEventListener('click', () => send());
+$('#btn-home').addEventListener('click', () => { showScreen('home'); updateHomeButton(); initAccountUI(); });
 $('#btn-save-id').addEventListener('click', saveCustomId);
 $('#btn-history').addEventListener('click', openHistory);
 $('#btn-history-back').addEventListener('click', () => showScreen('home'));
@@ -471,9 +472,24 @@ input.addEventListener('input', () => {
 });
 
 // ---------- 启动 ----------
+function resumeSession() {
+  if (!state.chat || state.chat.length === 0) return false;
+  showScreen('chat');
+  renderChapterCard();
+  state.chat.forEach((m) => { if (m.role === 'assistant') addMessage('assistant', m.content); else addMessage('user', m.content); });
+  updateProgress();
+  return true;
+}
+
+function updateHomeButton() {
+  const hasSession = state.chat && state.chat.length > 0;
+  $('#btn-start').textContent = hasSession ? '继续探索 🦦' : '开始探索 🦦';
+}
+
 async function init() {
   loadState();
   initAccountUI();
+  updateHomeButton();
   // 禁用按钮等待状态检查
   try {
     const res = await fetch('/api/status');
@@ -484,11 +500,6 @@ async function init() {
   } catch (e) { /* server not ready */ }
 
   // 恢复会话
-  if (state.chat && state.chat.length > 0) {
-    showScreen('chat');
-    renderChapterCard();
-    state.chat.forEach((m) => { if (m.role === 'assistant') addMessage('assistant', m.content); else addMessage('user', m.content); });
-    updateProgress();
-  }
+  resumeSession();
 }
 init();
