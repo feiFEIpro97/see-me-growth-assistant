@@ -242,8 +242,22 @@ body {
 .gen-notice { font-style: italic; color: var(--text-soft); font-size: 13px; }
 
 /* ---------- 响应式 ---------- */
-@media (max-width: 560px) {
-  .progress-track { width: 70px; }
+@media (max-width: 600px) {
+  /* 顶栏两行布局：第一行 返回+标题+按钮，第二行 进度条满宽 */
+  .topbar { flex-wrap: wrap; padding: 10px 12px; gap: 8px; }
+  .topbar-left { flex: 1; min-width: 0; gap: 8px; }
+  .topbar-right { order: 3; width: 100%; justify-content: space-between; gap: 8px; }
+  .progress-wrap { flex: 1; }
+  .progress-track { flex: 1; width: auto; height: 8px; }
+  .mini-otter { width: 30px; height: 30px; }
+  .brand-small { font-size: 14px; }
+  .chapter-name { font-size: 11px; }
+  .topbar-right .btn { padding: 7px 12px; font-size: 13px; }
+  .btn-home { padding: 7px 10px; font-size: 15px; }
+
   .msg { max-width: 94%; }
+  .msg-bubble { font-size: 14px; padding: 10px 13px; }
+  .msg .avatar { width: 32px; height: 32px; }
   .report-content { padding: 20px; }
+  .composer { padding: 10px 12px 14px; }
 }
