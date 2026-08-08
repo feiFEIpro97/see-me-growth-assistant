@@ -261,3 +261,77 @@ body {
   .report-content { padding: 20px; }
   .composer { padding: 10px 12px 14px; }
 }
+
+/* ---------- 交互组件 ---------- */
+.qcard {
+  background: var(--white); border: 1.5px solid var(--brown-200); border-radius: 16px;
+  padding: 16px 18px; margin: 4px 0 4px 48px; max-width: 88%; box-shadow: var(--shadow-sm);
+}
+.qcard-title { font-weight: 800; color: var(--brown-900); font-size: 15px; margin-bottom: 6px; }
+.qcard-prompt { font-size: 13px; color: var(--text); line-height: 1.6; margin-bottom: 8px; }
+.qcard-hint { font-size: 12px; color: var(--text-soft); margin-bottom: 10px; }
+.qcard-options { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+.qopt {
+  padding: 9px 14px; border-radius: 999px; font-size: 13px; cursor: pointer;
+  background: var(--blue-100); border: 1.5px solid var(--blue-300); color: var(--blue-700);
+  transition: all 0.2s; font-family: inherit;
+}
+.qopt:hover { border-color: var(--blue-500); transform: translateY(-1px); }
+.qopt.selected { background: linear-gradient(135deg, var(--blue-500), var(--blue-700)); color: #fff; border-color: var(--blue-700); }
+.qcard-actions { display: flex; gap: 10px; }
+.qsend {
+  padding: 9px 18px; border-radius: 999px; font-size: 14px; font-weight: 600; cursor: pointer;
+  background: linear-gradient(135deg, var(--brown-500), var(--brown-700)); color: #fff; border: none; font-family: inherit;
+}
+.qsend:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* 排序列表 */
+.qcard-sortlist { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
+.qsort-item {
+  display: flex; align-items: center; gap: 10px; padding: 10px 12px;
+  background: var(--blue-100); border: 1.5px solid var(--blue-300); border-radius: 10px;
+  cursor: grab; user-select: none; transition: all 0.15s;
+}
+.qsort-item.dragging { opacity: 0.6; transform: scale(0.98); border-color: var(--blue-700); }
+.qsort-item.selected { background: linear-gradient(135deg, var(--blue-500), var(--blue-700)); color: #fff; border-color: var(--blue-700); }
+.qs-handle { color: var(--blue-500); font-size: 14px; }
+.qsort-item.selected .qs-handle { color: rgba(255,255,255,0.8); }
+.qs-num { display: inline-flex; align-items: center; justify-content: center; min-width: 22px; height: 22px; border-radius: 50%; background: var(--brown-500); color: #fff; font-size: 12px; font-weight: 700; }
+.qs-text { flex: 1; }
+
+/* 滑杆 */
+.slider-row { margin-bottom: 14px; }
+.slider-label { font-size: 13px; font-weight: 600; color: var(--brown-700); margin-bottom: 6px; }
+.slider-track { display: flex; align-items: center; gap: 8px; }
+.slider-left, .slider-right { font-size: 11px; color: var(--text-soft); }
+.slider-input { flex: 1; accent-color: var(--brown-500); }
+
+/* 关键词 */
+.qcard-keywords .qopt { background: var(--brown-100); border-color: var(--brown-200); color: var(--brown-700); }
+.qcard-keywords .qopt.selected { background: linear-gradient(135deg, var(--brown-500), var(--brown-700)); color: #fff; border-color: var(--brown-700); }
+
+/* 阶段确认 */
+.summary-confirm { background: linear-gradient(135deg, var(--brown-100), var(--blue-100)); border: 1.5px solid var(--brown-300); border-radius: 16px; padding: 14px 18px; }
+.sc-title { font-weight: 700; color: var(--brown-900); font-size: 14px; margin-bottom: 10px; }
+.sc-btns { display: flex; gap: 10px; flex-wrap: wrap; }
+.sc-btns .chip { padding: 9px 14px; font-size: 12px; }
+.sc-yes { background: var(--brown-500); color: #fff; border-color: var(--brown-700); }
+.sc-mid { background: var(--blue-100); color: var(--blue-700); border-color: var(--blue-500); }
+.sc-no { color: var(--text-soft); border-color: var(--brown-300); }
+.sc-supply { margin-top: 10px; display: flex; flex-direction: column; gap: 8px; }
+.sc-textarea { width: 100%; min-height: 60px; padding: 10px 12px; border: 2px solid var(--brown-200); border-radius: 10px; font-size: 14px; font-family: inherit; resize: vertical; outline: none; }
+.sc-textarea:focus { border-color: var(--brown-500); }
+.sc-submit { background: var(--brown-500); color: #fff; border-color: var(--brown-700); align-self: flex-end; }
+
+/* 移动端适配交互组件 */
+@media (max-width: 600px) {
+  .qcard { margin-left: 0; max-width: 100%; }
+  .qopt { font-size: 12px; padding: 8px 12px; }
+  .qsort-item { padding: 8px 10px; }
+}
+
+/* 场景题 */
+.qscene { margin-bottom: 14px; padding: 12px; background: var(--brown-100); border-radius: 12px; border: 1px solid var(--brown-200); }
+.qscene-ord { font-size: 11px; font-weight: 700; color: var(--brown-500); margin-bottom: 4px; }
+.qscene-text { font-size: 14px; color: var(--text); margin-bottom: 10px; line-height: 1.6; }
+.qscene .qcard-options { margin-bottom: 0; }

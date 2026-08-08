@@ -18,6 +18,16 @@ const STORAGE_KEY = 'see-me-session-v1';
 const REPORT_KEY = 'see-me-report-v1';
 const USER_KEY = 'see-me-uid';
 
+// 每章的题目顺序（与 questions.js 一致）
+const CHAPTER_QUESTIONS = {
+  1: ['Q1', 'Q2', 'Q3'],
+  2: ['Q4', 'Q5'],
+  3: ['Q6', 'Q7', 'Q8'],
+  4: ['Q9', 'Q10', 'Q11', 'Q12'],
+  5: ['Q13', 'Q14', 'Q15'],
+  6: ['Q16', 'Q17'],
+};
+
 // 匿名用户 ID（存 localStorage，同一浏览器视为同一用户）
 function getUserId() {
   // 优先用用户自定义 ID，否则用匿名 ID
@@ -46,13 +56,18 @@ const reportContent = $('#report-content');
 const toast = $('#toast');
 
 // ---------- 状态 ----------
-let state = { chat: [], currentChapter: 0, report: '' };
+let state = { chat: [], currentChapter: 0, report: '', currentQuestion: null, completedQuestions: {} };
 let sending = false;
 
 function loadState() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) state = JSON.parse(raw);
+    if (raw) {
+      state = JSON.parse(raw);
+      // 兼容旧数据（v1 无非交互字段）
+      if (!state.currentQuestion) state.currentQuestion = null;
+      if (!state.completedQuestions) state.completedQuestions = {};
+    }
   } catch (e) { /* ignore */ }
 }
 function saveState() {
@@ -194,7 +209,7 @@ function reportProgress() {
   } catch (e) { /* fire-and-forget */ }
 }
 
-// ---------- 发送 ----------
+// ---------- 发送（用户提交答案后，AI 只分析当前题，前端推进） ----------
 async function send(text) {
   const userText = (text !== undefined ? text : input.value).trim();
   if (!userText || sending) return;
@@ -206,32 +221,27 @@ async function send(text) {
 
   addMessage('user', userText);
   state.chat.push({ role: 'user', content: userText });
+  // 移除当前题的交互卡片（Q1 等在主输入框提交的场景）
+  const curCard = document.querySelector('.qcard');
+  if (curCard) curCard.remove();
   saveState();
 
   const typing = addTyping();
   try {
-    const messages = [{ role: 'system', content: window.SYSTEM_PROMPT }, ...state.chat];
-    let reply = await callAI(messages);
+    // 只把当前题答案发给 AI 分析（不带出题职责）
+    const messages = [{ role: 'system', content: window.SYSTEM_PROMPT }];
+    const lastUser = state.chat.filter((m) => m.role === 'user').pop();
+    if (lastUser) messages.push({ role: 'user', content: lastUser.content });
+    const reply = await callAI(messages);
     typing.remove();
 
-    // 检测结束标记（兼容全角/半角）
-    const done = /【REPORT_READY】|\[REPORT_READY\]/;
-    const ready = done.test(reply);
-    if (ready) reply = reply.replace(/(【REPORT_READY】|\[REPORT_READY\])/g, '').trim();
-
     state.chat.push({ role: 'assistant', content: reply });
-    state.currentChapter = detectChapter(reply, state.currentChapter);
     saveState();
     addMessage('assistant', reply);
-    updateProgress();
-    chapterName.textContent = CHAPTERS[state.currentChapter].name;
-    reportProgress();
     showToast('海獭教练思考好啦 🌊');
 
-    // 若探索全部完成，自动生成报告
-    if (ready) {
-      await generateReportAndNotify();
-    }
+    // 前端推进：标记当前题完成，渲染下一题或阶段小结
+    advanceFlow();
   } catch (e) {
     typing.remove();
     addMessage('assistant', '🦦 哎呀，我这边有点小状况：\n' + e.message);
@@ -239,61 +249,576 @@ async function send(text) {
   }
   sending = false;
   btnSend.disabled = false;
-  input.focus();
+  if (!document.querySelector('.qcard')) input.focus();
 }
 
-// 生成报告并在对话中推送提醒
-async function generateReportAndNotify() {
-  // 对话中提示正在生成
+// 前端状态机：标记当前题完成，推进到下一题或阶段小结
+function advanceFlow() {
+  const curQ = state.currentQuestion;
+  if (curQ) {
+    state.completedQuestions = state.completedQuestions || {};
+    state.completedQuestions[curQ] = true;
+  }
+  const qs = CHAPTER_QUESTIONS[state.currentChapter + 1] || [];
+  const doneAll = qs.every((q) => state.completedQuestions[q]);
+  if (doneAll) {
+    // 本章完成：触发阶段小结
+    state.currentQuestion = null;
+    saveState();
+    generateStageSummary();
+  } else {
+    // 渲染本章下一道未完成的题
+    const next = renderNextPendingQuestion();
+    updateProgress();
+    saveState();
+  }
+  chapterName.textContent = CHAPTERS[state.currentChapter].name;
+  reportProgress();
+}
+
+// ---------- 交互渲染 ----------
+// 渲染当前章节中第一道未完成的题（前端主导，不依赖 AI 标记）
+function renderNextPendingQuestion() {
+  const qs = CHAPTER_QUESTIONS[state.currentChapter + 1] || [];
+  for (const q of qs) {
+    if (!(state.completedQuestions && state.completedQuestions[q])) {
+      state.currentQuestion = q;
+      tryRenderQuestion(q);
+      return q;
+    }
+  }
+  // 本章全部完成，返回 null（等待阶段确认或进入下一章）
+  state.currentQuestion = null;
+  return null;
+}
+
+// 尝试渲染当前题目的交互组件（若未完成）
+function tryRenderQuestion(qKey) {
+  if (state.completedQuestions && state.completedQuestions[qKey]) return;
+  const q = window.QUESTIONS && window.QUESTIONS[qKey];
+  if (!q) return;
+  // 若已有交互卡片则不再重复
+  if (document.querySelector('[data-qk="' + qKey + '"]')) return;
+  const wrap = document.createElement('div');
+  wrap.className = 'qcard';
+  wrap.dataset.qk = qKey;
+  if (q.type === 'sort') wrap.innerHTML = buildSortCard(q, qKey);
+  else if (q.type === 'slider') wrap.innerHTML = buildSliderCard(q);
+  else if (q.type === 'keyword') wrap.innerHTML = buildKeywordCard(q);
+  else if (q.type === 'free' && qKey === 'Q8') wrap.innerHTML = buildAiGenCard(q, qKey); // 仅 Q8 资产画像
+  else if (q.type === 'free') wrap.innerHTML = buildFreeGuideCard(q); // Q4 等开放题：引导卡
+  else wrap.innerHTML = buildSelectCard(q, qKey);
+  chatInner.appendChild(wrap);
+  bindQuestionCard(wrap);
+  scrollToBottom();
+}
+
+// AI 生成类（Q8 资产画像）
+function buildAiGenCard(q, qKey) {
+  return `<div class="qcard-title">${escapeHtml(q.title)}</div>
+    <div class="qcard-prompt">${escapeHtml(q.prompt)}</div>
+    <div class="qcard-actions"><button class="qsend">让 AI 生成我的资产画像</button></div>`;
+}
+
+// 开放题引导卡（Q4 等）：提示用户在主输入框作答
+function buildFreeGuideCard(q) {
+  return `<div class="qcard-title">${escapeHtml(q.title)}</div>
+    <div class="qcard-prompt">${escapeHtml(q.prompt)}</div>
+    <div class="qcard-hint">✍️ 请在下方输入框写下你的回答，然后点 ➤ 发送。</div>`;
+}
+
+// 单选/多选卡片（若 q.scenes 存在则渲染为场景题）
+function buildSelectCard(q, qKey) {
+  const multi = q.type === 'multi';
+  const max = q.maxSelect || 1;
+  const min = q.minSelect || 1;
+  let html = `<div class="qcard-title">${escapeHtml(q.title)}</div>`;
+  html += `<div class="qcard-prompt">${escapeHtml(q.prompt)}</div>`;
+  if (q.scenes && q.scenes.length) {
+    // 场景题：每个场景一组选项
+    q.scenes.forEach((scene, si) => {
+      html += `<div class="qscene">
+        <div class="qscene-ord">场景 ${si + 1}</div>
+        <div class="qscene-text">${escapeHtml(scene)}</div>
+        <div class="qcard-options">`;
+      q.options.forEach((opt, oi) => {
+        html += `<button class="qopt" data-label="${escapeHtml(opt)}" data-scene="${si}">${escapeHtml(opt)}</button>`;
+      });
+      html += `</div></div>`;
+    });
+  } else {
+    html += `<div class="qcard-hint">${multi ? '可多选，需选 ' + min + '-' + max + ' 个' : '单选'}</div>`;
+    html += `<div class="qcard-options">`;
+    q.options.forEach((opt, i) => {
+      html += `<button class="qopt" data-label="${escapeHtml(opt)}">${escapeHtml(opt)}</button>`;
+    });
+    html += `</div>`;
+  }
+  html += `<div class="qcard-actions"><button class="qsend" disabled>提交选择</button></div>`;
+  return html;
+}
+
+// 排序卡片（拖拽 + 触摸）
+function buildSortCard(q, qKey) {
+  const max = q.maxSelect || q.options.length;
+  let html = `<div class="qcard-title">${escapeHtml(q.title)}</div>`;
+  html += `<div class="qcard-prompt">${escapeHtml(q.prompt)}</div>`;
+  html += `<div class="qcard-hint">拖动以排序，最多选 ${max} 个（第一个最像你）</div>`;
+  html += `<div class="qcard-sortlist">`;
+  q.options.forEach((opt, i) => {
+    html += `<div class="qsort-item" data-label="${escapeHtml(opt)}" draggable="true">
+      <span class="qs-handle">☰</span><span class="qs-num"></span><span class="qs-text">${escapeHtml(opt)}</span>
+    </div>`;
+  });
+  html += `</div>`;
+  html += `<div class="qcard-actions"><button class="qsend" disabled>提交排序</button></div>`;
+  return html;
+}
+
+// 滑杆卡片
+function buildSliderCard(q) {
+  let html = `<div class="qcard-title">${escapeHtml(q.title)}</div>`;
+  html += `<div class="qcard-prompt">${escapeHtml(q.prompt)}</div>`;
+  q.sliders.forEach((s, i) => {
+    html += `<div class="slider-row">
+      <div class="slider-label">${escapeHtml(s.label)}</div>
+      <div class="slider-track"><span class="slider-left">${escapeHtml(s.left)}</span>
+        <input type="range" min="0" max="100" value="50" class="slider-input" data-idx="${i}" />
+        <span class="slider-right">${escapeHtml(s.right)}</span></div>
+    </div>`;
+  });
+  html += `<div class="qcard-actions"><button class="qsend">提交</button></div>`;
+  return html;
+}
+
+// Q1 关键词辅助卡片
+function buildKeywordCard(q) {
+  let html = `<div class="qcard-title">${escapeHtml(q.title)}</div>`;
+  html += `<div class="qcard-prompt">${escapeHtml(q.prompt)}</div>`;
+  html += `<div class="qcard-hint">如果还没有画面，可以点选几个关键词帮助启动想象（不作为分类）：</div>`;
+  html += `<div class="qcard-options qcard-keywords">`;
+  q.keywords.forEach((k) => {
+    html += `<button class="qopt qkw" data-label="${escapeHtml(k)}">${escapeHtml(k)}</button>`;
+  });
+  html += `</div>`;
+  html += `<div class="qcard-actions"><button class="qsend">选好了，开始描述</button></div>`;
+  return html;
+}
+
+// ---------- 阶段确认 ----------
+function renderStageConfirm() {
+  const wrap = document.createElement('div');
+  wrap.className = 'msg msg-otter';
+  wrap.innerHTML = `<div class="avatar"><img src="assets/avatar-o1.png" alt="海獭教练"></div>
+    <div class="summary-confirm">
+      <div class="sc-title">《阶段人生镜像》小结符合你的感受吗？</div>
+      <div class="sc-btns">
+        <button class="chip sc-yes" data-choice="A">A 非常准确，这就是我的想法</button>
+        <button class="chip sc-mid" data-choice="B">B 基本准确，但有部分需要调整</button>
+        <button class="chip sc-no" data-choice="C">C 不准确，我需要补充</button>
+      </div>
+      <div class="sc-supply hidden"><textarea class="sc-textarea" placeholder="请补充或纠正你的想法…"></textarea><button class="chip sc-submit">提交补充</button></div>
+    </div>`;
+  chatInner.appendChild(wrap);
+  bindStageConfirm(wrap);
+  scrollToBottom();
+}
+
+function bindStageConfirm(wrap) {
+  const supply = wrap.querySelector('.sc-supply');
+  const textarea = wrap.querySelector('.sc-textarea');
+  wrap.querySelectorAll('.sc-btns .chip').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const choice = btn.dataset.choice;
+      // 记录所选（B/C 用于提交补充时区分）
+      wrap.querySelectorAll('.sc-btns .chip').forEach((b) => b.classList.remove('selected'));
+      btn.classList.add('selected');
+      if (choice === 'A') {
+        finishStage(wrap, '阶段确认：A 非常准确');
+      } else {
+        supply.classList.remove('hidden');
+        textarea.focus();
+      }
+    });
+  });
+  wrap.querySelector('.sc-submit').addEventListener('click', () => {
+    const txt = textarea.value.trim();
+    const choice = wrap.querySelector('.chip.selected') ? 'B' : 'C';
+    const msg = txt ? '阶段确认：' + (choice === 'B' ? 'B 基本准确' : 'C 不准确') + '，补充：' + txt : (choice === 'B' ? '阶段确认：B 基本准确' : '阶段确认：C 不准确');
+    finishStage(wrap, msg);
+  });
+}
+
+// 完成阶段：记录确认，推进下一章（不调 send，直接渲染下一章第一题或生成报告）
+function finishStage(wrap, confirmMsg) {
+  wrap.remove();
+  // 记录阶段确认消息
+  addMessage('user', confirmMsg);
+  state.chat.push({ role: 'user', content: confirmMsg });
+  // 推进到下一章
+  const nextChapter = state.currentChapter + 1;
+  // 第七章（index 6）是"战略地图"输出章，无题目，直接生成报告
+  if (nextChapter === CHAPTERS.length - 1) {
+    state.currentChapter = nextChapter;
+    saveState();
+    chatInner.appendChild(createChapterCard(nextChapter));
+    updateProgress();
+    chapterName.textContent = CHAPTERS[nextChapter].name;
+    reportProgress();
+    generateReport();
+    return;
+  }
+  if (nextChapter < CHAPTERS.length) {
+    state.currentChapter = nextChapter;
+    saveState();
+    chatInner.appendChild(createChapterCard(nextChapter));
+    updateProgress();
+    chapterName.textContent = CHAPTERS[nextChapter].name;
+    // 渲染下一章第一题
+    renderNextPendingQuestion();
+    reportProgress();
+  } else {
+    // 已完成全部，生成最终报告
+    saveState();
+    generateReport();
+  }
+}
+
+// 本章完成后，让 AI 生成《阶段人生镜像》并请求确认
+async function generateStageSummary() {
   const genMsg = document.createElement('div');
   genMsg.className = 'msg msg-otter';
-  genMsg.innerHTML = `<div class="avatar"><img src="assets/avatar-o1.png" alt="海獭教练"></div><div class="msg-bubble gen-notice">🦦 正在为你生成专属《个人创造战略地图》…</div>`;
+  genMsg.innerHTML = `<div class="avatar"><img src="assets/avatar-o1.png" alt="海獭教练"></div><div class="msg-bubble gen-notice">🦦 让我为你生成这章的《阶段人生镜像》…</div>`;
   chatInner.appendChild(genMsg);
   scrollToBottom();
-
   try {
     const messages = [
       { role: 'system', content: window.SYSTEM_PROMPT },
       ...state.chat,
-      { role: 'user', content: '我们的探索已经全部完成。现在请根据我上面的全部回答，生成完整的《个人创造战略地图》，严格按第七章的结构输出，用 Markdown 分节，语气温暖具体。' },
+      { role: 'user', content: '【STAGE_SUMMARY】请基于本章所有回答，生成《阶段人生镜像》。' },
     ];
-    const report = await callAI(messages);
-    localStorage.setItem(REPORT_KEY, report);
+    const reply = await callAI(messages);
     genMsg.remove();
+    addMessage('assistant', reply);
+    state.chat.push({ role: 'assistant', content: reply });
+    saveState();
+    renderStageConfirm();
+  } catch (e) {
+    genMsg.remove();
+    addMessage('assistant', '🦦 生成阶段小结遇到点问题：' + e.message);
+  }
+}
 
-    // 报告同步保存到服务端（按用户ID的最新会话）
+// 最终报告
+async function generateReport() {
+  const genMsg = document.createElement('div');
+  genMsg.className = 'msg msg-otter';
+  genMsg.innerHTML = `<div class="avatar"><img src="assets/avatar-o1.png" alt="海獭教练"></div><div class="msg-bubble gen-notice">
+    🦦 恭喜你完成了全部探索！正在为你生成专属《个人创造战略地图》…<br/>
+    预计需要 20-40 秒，你可以稍等片刻，也可以先切出去休息，稍后回来（右上角「报告」按钮）查看完整报告。</div>`;
+  chatInner.appendChild(genMsg);
+  scrollToBottom();
+  try {
+    const messages = [
+      { role: 'system', content: window.SYSTEM_PROMPT },
+      ...state.chat,
+      { role: 'user', content: '【REPORT】请根据我所有的回答，生成我的《个人创造战略地图》，严格按 7 个模块输出。' },
+    ];
+    let reply = await callAI(messages);
+    genMsg.remove();
+    reply = reply.replace(/(【REPORT_READY】|\[REPORT_READY\])/g, '').trim();
+    localStorage.setItem(REPORT_KEY, reply);
     try {
       await fetch('/api/report', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: getUserId(), report }),
+        body: JSON.stringify({ userId: getUserId(), report: reply }),
       });
-    } catch (e) { /* 保存失败不影响本地查看 */ }
-
-    // 对话中推送可点击提醒
+    } catch (e) { /* ignore */ }
+    addMessage('assistant', reply);
+    state.chat.push({ role: 'assistant', content: reply });
+    state.report = reply;
+    saveState();
+    // 对话中推送报告提醒
     const notice = document.createElement('div');
     notice.className = 'msg msg-otter';
-    notice.innerHTML = `
-      <div class="avatar"><img src="assets/avatar-o1.png" alt="海獭教练"></div>
+    notice.innerHTML = `<div class="avatar"><img src="assets/avatar-o1.png" alt="海獭教练"></div>
       <div class="report-notice" id="report-notice">
         <img src="assets/report-otter.png" alt="报告" />
-        <div class="rn-text">
-          <div class="rn-title">🎉 你的《个人创造战略地图》完成啦！</div>
-          <div class="rn-sub">点击查看完整报告</div>
-        </div>
+        <div class="rn-text"><div class="rn-title">🎉 你的《个人创造战略地图》完成啦！</div><div class="rn-sub">点击查看完整报告</div></div>
       </div>`;
     chatInner.appendChild(notice);
     scrollToBottom();
     notice.querySelector('.report-notice').addEventListener('click', viewReport);
   } catch (e) {
     genMsg.remove();
-    addMessage('assistant', '🦦 报告生成遇到点问题：' + e.message);
+    addMessage('assistant', '🦦 生成报告遇到点问题：' + e.message);
   }
 }
 
+function createChapterCard(chapterIdx) {
+  const c = CHAPTERS[chapterIdx] || CHAPTERS[0];
+  const card = document.createElement('div');
+  card.className = 'chapter-card';
+  card.innerHTML = `<div class="cc-tag">第 ${chapterIdx + 1} 章 / 共 7 章</div><div class="cc-title">${c.name}</div>`;
+  return card;
+}
+
+// ---------- 交互绑定 ----------
+function bindQuestionCard(container) {
+  const qKey = container.dataset.qk;
+  const q = window.QUESTIONS[qKey];
+  const sendBtn = container.querySelector('.qsend');
+
+  if (q.type === 'free' && qKey === 'Q8') {
+    // Q8 资产画像：点击触发 AI 生成
+    sendBtn.addEventListener('click', () => generateAiAssetPortrait(container, qKey));
+    return;
+  }
+  if (q.type === 'free') {
+    // 开放题引导卡（Q4 等）：聚焦输入框，提示用户作答
+    input.focus();
+    return;
+  }
+  if (q.type === 'sort') {
+    bindSort(container, q, sendBtn);
+  } else if (q.type === 'slider') {
+    sendBtn.addEventListener('click', () => submitSlider(container, q));
+  } else if (q.type === 'keyword') {
+    container.querySelectorAll('.qkw').forEach((b) => {
+      b.addEventListener('click', () => {
+        b.classList.toggle('selected');
+        // 把选中的关键词填入输入框，引导用户描述
+        const sel = Array.from(container.querySelectorAll('.qkw.selected')).map((x) => x.dataset.label);
+        input.value = '我参考了这些关键词：' + sel.join('、') + '。我的理想一天是：';
+        input.style.height = 'auto';
+        input.style.height = Math.min(input.scrollHeight, 120) + 'px';
+        input.focus();
+      });
+    });
+    // 用户在主输入框写好描述后，点发送按钮提交（走 send）
+    // 卡片上的"选好了"按钮引导用户使用主输入框
+    sendBtn.addEventListener('click', () => {
+      // 若有关键词，直接引导到输入框，不自动提交
+      showToast('请在下方输入框描述你的理想一天，然后点 ➤ 发送');
+      input.focus();
+    });
+  } else {
+    // 单选/多选
+    const multi = q.type === 'multi';
+    const max = q.maxSelect || 1;
+    const min = q.minSelect || 1;
+    const isScene = !multi && q.scenes && q.scenes.length > 0;
+    const sceneCount = isScene ? q.scenes.length : 1;
+
+    // 更新提交按钮状态
+    function updateSceneBtn() {
+      if (isScene) {
+        // 每个场景都要选一个
+        let done = 0;
+        for (let si = 0; si < sceneCount; si++) {
+          if (container.querySelectorAll('.qopt.selected[data-scene="' + si + '"]').length > 0) done++;
+        }
+        sendBtn.disabled = done < sceneCount;
+      } else {
+        const count = container.querySelectorAll('.qopt.selected').length;
+        sendBtn.disabled = count < min;
+      }
+    }
+
+    container.querySelectorAll('.qopt').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        if (isScene) {
+          // 场景内单选互斥
+          const scene = btn.dataset.scene;
+          container.querySelectorAll('.qopt[data-scene="' + scene + '"]').forEach((b) => b.classList.remove('selected'));
+          btn.classList.add('selected');
+        } else if (!multi) {
+          container.querySelectorAll('.qopt').forEach((b) => { if (b !== btn) b.classList.remove('selected'); });
+          btn.classList.add('selected');
+        } else {
+          btn.classList.toggle('selected');
+          const sel = container.querySelectorAll('.qopt.selected').length;
+          if (sel > max) { btn.classList.remove('selected'); showToast('最多选 ' + max + ' 个'); }
+        }
+        updateSceneBtn();
+      });
+    });
+    sendBtn.addEventListener('click', () => {
+      if (isScene) {
+        const answers = [];
+        for (let si = 0; si < sceneCount; si++) {
+          const sel = container.querySelector('.qopt.selected[data-scene="' + si + '"]');
+          if (sel) answers.push('场景' + (si + 1) + '(' + q.scenes[si].slice(0, 12) + '…)→' + sel.dataset.label);
+        }
+        if (answers.length < sceneCount) { showToast('请完成所有场景的选择'); return; }
+        submitAnswer(container, qKey, answers.join('；'));
+      } else {
+        const sel = Array.from(container.querySelectorAll('.qopt.selected')).map((b) => b.dataset.label);
+        if (sel.length < (q.minSelect || 1)) { showToast('还需选择'); return; }
+        submitAnswer(container, qKey, sel.join('、'));
+      }
+    });
+    updateSceneBtn();
+  }
+}
+
+// 排序交互（拖拽 + 触摸）
+function bindSort(container, q, sendBtn) {
+  const list = container.querySelector('.qcard-sortlist');
+  const max = q.maxSelect || q.options.length;
+  let dragged = null;
+
+  function updateNums() {
+    const items = list.querySelectorAll('.qsort-item');
+    let n = 1;
+    items.forEach((it) => {
+      if (n <= max) { it.classList.add('selected'); it.querySelector('.qs-num').textContent = n; n++; }
+      else { it.classList.remove('selected'); it.querySelector('.qs-num').textContent = ''; }
+    });
+    sendBtn.disabled = n === 1;
+  }
+  updateNums();
+
+  // 拖拽开始
+  function onDragStart(e) {
+    dragged = e.target.closest('.qsort-item');
+    if (!dragged) return;
+    dragged.classList.add('dragging');
+    e.dataTransfer && e.dataTransfer.effectAllowed && (e.dataTransfer.effectAllowed = 'move');
+  }
+  function onDragOver(e) {
+    e.preventDefault();
+    const target = e.target.closest('.qsort-item');
+    if (!target || target === dragged) return;
+    const rect = target.getBoundingClientRect();
+    const after = (e.clientY > rect.top + rect.height / 2);
+    if (after) target.after(dragged); else target.before(dragged);
+    updateNums();
+  }
+  function onDragEnd() {
+    if (dragged) { dragged.classList.remove('dragging'); dragged = null; }
+  }
+  // 触摸支持
+  let touchMoved = false;
+  function onTouchStart(e) {
+    const it = e.target.closest('.qsort-item');
+    if (!it) return;
+    dragged = it; touchMoved = false;
+    it.classList.add('dragging');
+  }
+  function onTouchMove(e) {
+    if (!dragged) return;
+    touchMoved = true;
+    e.preventDefault();
+    const touch = e.touches[0];
+    const target = document.elementFromPoint(touch.clientX, touch.clientY)?.closest('.qsort-item');
+    if (target && target !== dragged) {
+      const rect = target.getBoundingClientRect();
+      if (touch.clientY > rect.top + rect.height / 2) target.after(dragged); else target.before(dragged);
+      updateNums();
+    }
+  }
+  function onTouchEnd() {
+    if (dragged) { dragged.classList.remove('dragging'); dragged = null; }
+  }
+
+  list.addEventListener('dragstart', onDragStart);
+  list.addEventListener('dragover', onDragOver);
+  list.addEventListener('dragend', onDragEnd);
+  list.addEventListener('touchstart', onTouchStart, { passive: false });
+  list.addEventListener('touchmove', onTouchMove, { passive: false });
+  list.addEventListener('touchend', onTouchEnd);
+
+  sendBtn.addEventListener('click', () => {
+    if (sendBtn.disabled) return;
+    const order = Array.from(list.querySelectorAll('.qsort-item.selected')).map((it) => it.dataset.label);
+    if (!order.length) { showToast('请先排序'); return; }
+    submitAnswer(container, container.dataset.qk, order.join(' > '));
+  });
+}
+
+// 滑杆提交
+function submitSlider(container, q) {
+  const vals = Array.from(container.querySelectorAll('.slider-input')).map((inp) => {
+    const idx = inp.dataset.idx;
+    return q.sliders[idx].label + ':' + inp.value;
+  });
+  submitAnswer(container, container.dataset.qk, vals.join('；'));
+}
+
+// 提交答案：记录到 chat + 后端，发送给 AI（推进由 send->advanceFlow 统一负责）
+function submitAnswer(container, qKey, answerText) {
+  container.remove();
+  // 设置当前题，供 advanceFlow 标记完成
+  state.currentQuestion = qKey;
+  const tagged = '【' + qKey + '】' + answerText;
+  addMessage('user', tagged);
+  state.chat.push({ role: 'user', content: tagged });
+  saveState();
+  send(tagged);
+}
+
+// Q8 资产画像：AI 基于前面回答生成
+async function generateAiAssetPortrait(container, qKey) {
+  container.remove();
+  addMessage('assistant', '🦦 让我根据你前面所有的回答，为你生成《你的个人资产初步画像》…');
+  try {
+    const messages = [
+      { role: 'system', content: window.SYSTEM_PROMPT },
+      ...state.chat,
+      { role: 'user', content: '请根据我前面所有的回答，生成《你的个人资产初步画像》，包含：能力资产（可能包括）/经历资产（可能包括）/性格资产（可能包括）/资源资产（可能包括）。用 Markdown 结构输出，语气温暖。' },
+    ];
+    const reply = await callAI(messages);
+    addMessage('assistant', reply);
+    state.chat.push({ role: 'assistant', content: reply });
+    // 渲染确认卡片
+    const wrap = document.createElement('div');
+    wrap.className = 'msg msg-otter';
+    wrap.innerHTML = `<div class="avatar"><img src="assets/avatar-o1.png" alt="海獭教练"></div>
+      <div class="summary-confirm">
+        <div class="sc-title">这份资产画像准确吗？</div>
+        <div class="sc-btns">
+          <button class="chip sc-yes">✓ 准确</button>
+          <button class="chip sc-no">✎ 需要修改</button>
+        </div>
+        <div class="sc-supply hidden"><textarea class="sc-textarea" placeholder="哪些准确？哪些需要修改？"></textarea><button class="chip sc-submit">提交</button></div>
+      </div>`;
+    chatInner.appendChild(wrap);
+    const supply = wrap.querySelector('.sc-supply');
+    const textarea = wrap.querySelector('.sc-textarea');
+    wrap.querySelector('.sc-yes').addEventListener('click', () => {
+      wrap.remove();
+      finishQuestionAfterConfirm(qKey, '资产画像确认：准确');
+    });
+    wrap.querySelector('.sc-no').addEventListener('click', () => {
+      supply.classList.remove('hidden'); textarea.focus();
+    });
+    wrap.querySelector('.sc-submit').addEventListener('click', () => {
+      const txt = textarea.value.trim();
+      wrap.remove();
+      finishQuestionAfterConfirm(qKey, '资产画像确认，修改：' + (txt || '无补充'));
+    });
+    scrollToBottom();
+  } catch (e) {
+    addMessage('assistant', '🦦 生成资产画像遇到点问题：' + e.message);
+  }
+}
+
+// Q8 确认后完成该题，进入下一题
+function finishQuestionAfterConfirm(qKey, confirmMsg) {
+  state.completedQuestions = state.completedQuestions || {};
+  state.completedQuestions[qKey] = true;
+  addMessage('user', confirmMsg);
+  state.chat.push({ role: 'user', content: confirmMsg });
+  saveState();
+  send('（已确认' + qKey + '，继续下一题）');
+}
+
+// 生成报告并在对话中推送提醒
 // ---------- 重置 / 开始 ----------
 function resetSession() {
-  state = { chat: [], currentChapter: 0, report: '' };
+  state = { chat: [], currentChapter: 0, report: '', currentQuestion: null, completedQuestions: {} };
   localStorage.removeItem(STORAGE_KEY);
   localStorage.removeItem(REPORT_KEY);
   chatInner.innerHTML = '';
@@ -304,22 +829,18 @@ async function startNew() {
   showScreen('chat');
   renderChapterCard();
   updateProgress();
-  renderSuggestions(['开始我们的探索吧 🌟']);
+  chapterName.textContent = CHAPTERS[0].name;
 
-  const typing = addTyping();
-  try {
-    const greeting = await callAI([
-      { role: 'system', content: window.SYSTEM_PROMPT },
-      { role: 'user', content: '（这是一段新探索的开始）海獭教练，请向我做一个简短温暖的自我介绍，说明你会陪我完成 7 个章节、约 20 分钟的自我探索，然后正式开始第一章的第一个问题。' },
-    ]);
-    typing.remove();
-    state.chat.push({ role: 'assistant', content: greeting });
-    saveState();
-    addMessage('assistant', greeting);
-  } catch (e) {
-    typing.remove();
-    addMessage('assistant', '🦦 你好呀！我是 see-me 海獭教练，很高兴陪你一起探索自己 🌊\n\n（注意：' + e.message + '）');
-  }
+  // 固定欢迎语（不依赖 AI）
+  const greeting = '🦦 你好呀！我是你的海獭人生教练 see-me。接下来我会陪你用 7 个章节、约 20 分钟，完成一次深度的自我探索。\n\n我们按顺序来，一步一题，界面会引导你作答。\n\n💾 不用担心一次做完——你的进度会自动保存，随时可以关掉休息，回来继续。就从第一章的第一个问题开始吧（请看下方的卡片）。';
+  addMessage('assistant', greeting);
+  state.chat.push({ role: 'assistant', content: greeting });
+  saveState();
+
+  // 渲染第一章第一题
+  state.currentQuestion = null;
+  renderNextPendingQuestion();
+  input.placeholder = '自由输入你的想法，或按界面卡片作答';
   input.focus();
 }
 
@@ -484,10 +1005,11 @@ function resumeSession() {
     state.chat.forEach((m) => { if (m.role === 'assistant') addMessage('assistant', m.content); else addMessage('user', m.content); });
   }
   updateProgress();
-  // 滚动到底部 + 聚焦输入框，让用户直接接着答
+  // 恢复后，渲染当前章节第一道未完成题（前端主导）
   requestAnimationFrame(() => {
+    renderNextPendingQuestion();
     chatScroll.scrollTop = chatScroll.scrollHeight;
-    input.focus();
+    if (!document.querySelector('.qcard')) input.focus();
   });
   return true;
 }
